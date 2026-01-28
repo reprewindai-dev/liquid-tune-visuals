@@ -9,6 +9,7 @@ import { MusicSelector } from "@/components/MusicSelector";
 import { SceneSelector } from "@/components/SceneSelector";
 import { VideoPreview } from "@/components/VideoPreview";
 import { AppState, StepKey, Scene, Track } from "@/types/app";
+import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
 
 const stepInfo: Record<StepKey, { title: string; description: string }> = {
   upload: {
@@ -46,6 +47,9 @@ export default function Index() {
   });
 
   const [completedSteps, setCompletedSteps] = useState<StepKey[]>([]);
+  
+  // Audio analysis hook
+  const { analysis, isAnalyzing, analyzeAudio, clearAnalysis } = useAudioAnalysis();
 
   const currentStepIndex = stepOrder.indexOf(state.step);
 
@@ -96,6 +100,7 @@ export default function Index() {
       selectedScene: null,
     });
     setCompletedSteps([]);
+    clearAnalysis();
   };
 
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => {
@@ -153,6 +158,9 @@ export default function Index() {
                   customAudio={state.customAudio}
                   onTrackSelect={(track) => updateState("selectedTrack", track)}
                   onCustomAudioSelect={(file) => updateState("customAudio", file)}
+                  analysis={analysis}
+                  isAnalyzing={isAnalyzing}
+                  onAnalyzeAudio={analyzeAudio}
                 />
               )}
 
@@ -160,6 +168,7 @@ export default function Index() {
                 <SceneSelector
                   selectedScene={state.selectedScene}
                   onSceneSelect={(scene) => updateState("selectedScene", scene)}
+                  analysis={analysis}
                 />
               )}
 

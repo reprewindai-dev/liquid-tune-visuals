@@ -1,24 +1,46 @@
-import { useState } from "react";
-import { Film, Sparkles, Check, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Film, Sparkles, Check, Loader2, Zap, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Scene } from "@/types/app";
 import { premadeScenes } from "@/data/scenes";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { AudioAnalysisResult } from "@/types/audioAnalysis";
+import { SCENE_TYPE_TO_ID } from "@/lib/visualMappingEngine";
 
 interface SceneSelectorProps {
   selectedScene: Scene | null;
   onSceneSelect: (scene: Scene | null) => void;
+  analysis?: AudioAnalysisResult | null;
 }
 
-export function SceneSelector({ selectedScene, onSceneSelect }: SceneSelectorProps) {
+export function SceneSelector({ selectedScene, onSceneSelect, analysis }: SceneSelectorProps) {
   const [customDescription, setCustomDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
+
+  // Get recommended scene ID from analysis
+  const recommendedSceneId = analysis?.visualRecommendations
+    ? SCENE_TYPE_TO_ID[analysis.visualRecommendations.recommendedSceneType]
+    : null;
+
+  // Auto-select recommended scene when analysis is available
+  useEffect(() => {
+    if (recommendedSceneId && !selectedScene) {
+      const recommended = premadeScenes.find(s => s.id === recommendedSceneId);
+      if (recommended) {
+        onSceneSelect(recommended);
+        toast.success('AI selected a scene based on your track!', {
+          description: analysis?.visualRecommendations?.rationale?.slice(0, 100) + '...',
+        });
+      }
+    }
+  }, [recommendedSceneId]);
 
   const generateCustomScene = async () => {
     if (!customDescription.trim()) {
@@ -61,13 +83,56 @@ export function SceneSelector({ selectedScene, onSceneSelect }: SceneSelectorPro
 
   const allScenes = [...generatedScenes, ...premadeScenes];
 
+  // Sort scenes to show recommended first
+  const sortedScenes = recommendedSceneId
+    ? [
+        ...allScenes.filter(s => s.id === recommendedSceneId),
+        ...allScenes.filter(s => s.id !== recommendedSceneId),
+      ]
+    : allScenes;
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* AI Recommendation Banner */}
+      {analysis?.visualRecommendations && (
+        <Card className="border-primary/30 bg-gradient-to-r from-primary/10 to-secondary/10">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-semibold flex items-center gap-2">
+                  AI Scene Recommendation
+                  <Badge variant="outline" className="bg-primary/10 text-xs">
+                    Based on your track
+                  </Badge>
+                </h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {analysis.visualRecommendations.rationale}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <Badge className="bg-primary/20 text-primary border-0">
+                    {analysis.visualRecommendations.colorPalette.replace(/_/g, ' ')} palette
+                  </Badge>
+                  <Badge className="bg-secondary/20 text-secondary border-0">
+                    {analysis.visualRecommendations.lightingStyle.replace(/_/g, ' ')} lighting
+                  </Badge>
+                  <Badge className="bg-accent/20 text-accent-foreground border-0">
+                    {analysis.visualRecommendations.aesthetic.replace(/_/g, ' ')} aesthetic
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="premade" className="w-full">
         <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="premade" className="gap-2">
             <Film className="w-4 h-4" />
-            Pre-made Scenes
+            {analysis ? 'AI Recommended' : 'Pre-made Scenes'}
           </TabsTrigger>
           <TabsTrigger value="custom" className="gap-2">
             <Sparkles className="w-4 h-4" />
@@ -77,15 +142,17 @@ export function SceneSelector({ selectedScene, onSceneSelect }: SceneSelectorPro
 
         <TabsContent value="premade" className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {allScenes.map((scene) => {
+            {sortedScenes.map((scene, index) => {
               const isSelected = selectedScene?.id === scene.id;
+              const isRecommended = scene.id === recommendedSceneId;
 
               return (
                 <Card
                   key={scene.id}
                   className={cn(
                     "cursor-pointer overflow-hidden transition-all duration-200 hover:shadow-lg hover:scale-[1.02]",
-                    isSelected && "ring-2 ring-primary glow-primary"
+                    isSelected && "ring-2 ring-primary glow-primary",
+                    isRecommended && !isSelected && "ring-2 ring-secondary/50"
                   )}
                   onClick={() => onSceneSelect(scene)}
                 >
@@ -104,6 +171,12 @@ export function SceneSelector({ selectedScene, onSceneSelect }: SceneSelectorPro
                         <span className="text-xs text-primary">AI Generated</span>
                       )}
                     </div>
+                    {isRecommended && (
+                      <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-full bg-secondary/90 text-secondary-foreground text-xs">
+                        <Star className="w-3 h-3" />
+                        AI Pick
+                      </div>
+                    )}
                     {isSelected && (
                       <div className="absolute top-2 right-2 w-6 h-6 rounded-full gradient-primary flex items-center justify-center">
                         <Check className="w-3 h-3 text-primary-foreground" />
@@ -124,7 +197,11 @@ export function SceneSelector({ selectedScene, onSceneSelect }: SceneSelectorPro
                   Describe your scene
                 </label>
                 <Textarea
-                  placeholder="e.g., Neon-lit Tokyo street at night with rain reflecting the colorful signs..."
+                  placeholder={
+                    analysis
+                      ? `Based on your ${analysis.subGenre.replace(/_/g, ' ')} track, try: "${analysis.mood === 'dark' ? 'Dark warehouse with red neon lights and smoke' : analysis.mood === 'party' ? 'VIP club section with bottle service and strobe lights' : 'Luxury penthouse overlooking city skyline at night'}"`
+                      : "e.g., Neon-lit Tokyo street at night with rain reflecting the colorful signs..."
+                  }
                   value={customDescription}
                   onChange={(e) => setCustomDescription(e.target.value)}
                   className="min-h-[100px] resize-none"
