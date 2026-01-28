@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, forwardRef } from "react";
 import { Upload, Camera, X, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,8 @@ interface PhotoUploadProps {
   currentPhoto: string | null;
 }
 
-export function PhotoUpload({ onPhotoSelected, currentPhoto }: PhotoUploadProps) {
+export const PhotoUpload = forwardRef<HTMLDivElement, PhotoUploadProps>(
+  function PhotoUpload({ onPhotoSelected, currentPhoto }, ref) {
   const [isDragging, setIsDragging] = useState(false);
 
   const processFile = useCallback((file: File) => {
@@ -73,7 +74,7 @@ export function PhotoUpload({ onPhotoSelected, currentPhoto }: PhotoUploadProps)
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div ref={ref} className="space-y-6 animate-fade-in">
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -137,4 +138,4 @@ export function PhotoUpload({ onPhotoSelected, currentPhoto }: PhotoUploadProps)
       </div>
     </div>
   );
-}
+});
