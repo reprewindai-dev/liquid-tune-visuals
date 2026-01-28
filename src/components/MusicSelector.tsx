@@ -110,15 +110,19 @@ export function MusicSelector({
         </TabsContent>
 
         <TabsContent value="upload" className="space-y-4">
-          <div className="border-2 border-dashed rounded-2xl p-8 text-center transition-all hover:border-primary/50 hover:bg-muted/50">
+          <div 
+            className="border-2 border-dashed rounded-2xl p-8 text-center transition-all hover:border-primary/50 hover:bg-muted/50 cursor-pointer relative"
+            onClick={() => document.getElementById('audio-upload')?.click()}
+          >
             <input
               type="file"
-              accept="audio/*"
+              accept="audio/mp3,audio/wav,audio/x-m4a,audio/mpeg,audio/*"
               onChange={handleFileUpload}
-              className="hidden"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               id="audio-upload"
+              style={{ fontSize: '0' }}
             />
-            <label htmlFor="audio-upload" className="cursor-pointer space-y-4 block">
+            <div className="pointer-events-none space-y-4">
               <div className="w-16 h-16 mx-auto rounded-full gradient-secondary flex items-center justify-center">
                 <Upload className="w-6 h-6 text-secondary-foreground" />
               </div>
@@ -128,7 +132,7 @@ export function MusicSelector({
                   MP3, WAV, M4A up to 50MB
                 </p>
               </div>
-            </label>
+            </div>
           </div>
 
           {customAudio && (
