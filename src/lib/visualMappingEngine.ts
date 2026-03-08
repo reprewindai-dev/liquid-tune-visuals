@@ -305,20 +305,20 @@ export function mapAudioToVisuals(analysis: AudioAnalysisResult): VisualRecommen
  * Maps our scene types to actual scene IDs in the app
  */
 export const SCENE_TYPE_TO_ID: Record<SceneType, string> = {
-  concert_stage: 'stage',
-  recording_studio: 'studio',
-  city_night: 'city-night',
-  neon_alley: 'neon-alley',
+  concert_stage: 'concert_stage',
+  recording_studio: 'recording_studio',
+  city_night: 'city_night',
+  neon_alley: 'neon_alley',
   rooftop: 'rooftop',
-  abstract_void: 'abstract',
-  luxury_setting: 'rooftop', // Will need to add luxury scene
-  street_corner: 'city-night', // Will need to add street scene
-  dark_warehouse: 'neon-alley', // Closest match
-  sunset_vibe: 'sunset-beach',
-  mansion_party: 'rooftop', // Will need to add mansion scene
-  desert_landscape: 'desert',
-  rain_city: 'city-night', // Will need rain variant
-  car_interior: 'studio', // Will need car scene
+  abstract_void: 'abstract_void',
+  luxury_setting: 'luxury_setting',
+  street_corner: 'street_corner',
+  dark_warehouse: 'dark_warehouse',
+  sunset_vibe: 'sunset_vibe',
+  mansion_party: 'mansion_party',
+  desert_landscape: 'sunset_vibe',
+  rain_city: 'rain_city',
+  car_interior: 'car_interior',
 };
 
 /**
