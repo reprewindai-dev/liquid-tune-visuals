@@ -21,22 +21,9 @@ interface GeneratedClip {
   prompt?: string;
 }
 
-type GenerationStatus = 'idle' | 'selecting' | 'generating' | 'complete' | 'error';
+type GenerationStatus = 'idle' | 'detecting' | 'generating' | 'complete' | 'error';
 
-interface VideoLength {
-  id: string;
-  name: string;
-  clips: number;
-  duration: string;
-  description: string;
-}
-
-const VIDEO_LENGTHS: VideoLength[] = [
-  { id: 'short', name: 'Short', clips: 2, duration: '~10s', description: 'Quick preview' },
-  { id: 'medium', name: 'Medium', clips: 4, duration: '~20s', description: 'Music clip' },
-  { id: 'full', name: 'Full', clips: 6, duration: '~30s', description: 'Full video' },
-  { id: 'extended', name: 'Extended', clips: 10, duration: '~50s', description: 'Extended cut' },
-];
+const CLIP_DURATION_SECONDS = 5; // Each generated clip is ~5 seconds
 
 export function VideoPreview({
   avatarImage,
