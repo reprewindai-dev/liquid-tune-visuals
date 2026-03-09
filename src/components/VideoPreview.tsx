@@ -21,9 +21,15 @@ interface GeneratedClip {
   prompt?: string;
 }
 
-type GenerationStatus = 'idle' | 'detecting' | 'generating' | 'complete' | 'error';
+type GenerationStatus = 'detecting' | 'generating' | 'complete' | 'error';
 
-const CLIP_DURATION_SECONDS = 5; // Each generated clip is ~5 seconds
+const CLIP_DURATION_SECONDS = 5;
+
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 export function VideoPreview({
   avatarImage,
@@ -32,8 +38,9 @@ export function VideoPreview({
   customAudio,
   onStartOver,
 }: VideoPreviewProps) {
-  const [status, setStatus] = useState<GenerationStatus>('selecting');
-  const [selectedLength, setSelectedLength] = useState<VideoLength | null>(null);
+  const [status, setStatus] = useState<GenerationStatus>('detecting');
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [totalClips, setTotalClips] = useState(0);
   const [progress, setProgress] = useState(0);
   const [currentGeneratingClip, setCurrentGeneratingClip] = useState(0);
   const [generatedClips, setGeneratedClips] = useState<GeneratedClip[]>([]);
@@ -50,17 +57,45 @@ export function VideoPreview({
   const musicName = customAudio?.name || selectedTrack?.name || "Your Track";
   const musicGenre = selectedTrack?.genre || "pop";
 
-  // Create audio URL once
+  // Detect audio duration and create URL
   useEffect(() => {
-    if (customAudio && !audioUrlRef.current) {
-      audioUrlRef.current = URL.createObjectURL(customAudio);
+    if (customAudio) {
+      const url = URL.createObjectURL(customAudio);
+      audioUrlRef.current = url;
+      
+      const audio = new Audio(url);
+      audio.addEventListener('loadedmetadata', () => {
+        const duration = audio.duration;
+        setAudioDuration(duration);
+        const clips = Math.max(1, Math.ceil(duration / CLIP_DURATION_SECONDS));
+        setTotalClips(clips);
+        console.log(`Audio duration: ${duration.toFixed(1)}s → ${clips} clips needed`);
+      });
+      audio.addEventListener('error', () => {
+        // Fallback: estimate from file size (~128kbps)
+        const estimatedDuration = (customAudio.size * 8) / (128 * 1000);
+        setAudioDuration(estimatedDuration);
+        const clips = Math.max(1, Math.ceil(estimatedDuration / CLIP_DURATION_SECONDS));
+        setTotalClips(clips);
+      });
+      
+      return () => {
+        URL.revokeObjectURL(url);
+        audioUrlRef.current = null;
+      };
+    } else if (selectedTrack?.duration) {
+      // Parse duration string like "3:45"
+      const parts = selectedTrack.duration.split(':');
+      const seconds = parseInt(parts[0]) * 60 + parseInt(parts[1] || '0');
+      setAudioDuration(seconds);
+      const clips = Math.max(1, Math.ceil(seconds / CLIP_DURATION_SECONDS));
+      setTotalClips(clips);
+    } else {
+      // Default fallback
+      setAudioDuration(30);
+      setTotalClips(6);
     }
-    return () => {
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-      }
-    };
-  }, [customAudio]);
+  }, [customAudio, selectedTrack]);
 
   // Determine mood from scene
   const getMood = (): string => {
@@ -73,7 +108,7 @@ export function VideoPreview({
   };
 
   const generateVideoClips = useCallback(async () => {
-    if (!selectedLength) return;
+    if (totalClips === 0) return;
     
     setStatus('generating');
     setProgress(0);
@@ -81,7 +116,6 @@ export function VideoPreview({
     setErrorMessage(null);
     setGeneratedClips([]);
     
-    const totalClips = selectedLength.clips;
     const clips: GeneratedClip[] = [];
     
     try {
@@ -116,7 +150,6 @@ export function VideoPreview({
             prompt: data.prompt
           });
           
-          // Update clips as they come in for preview
           setGeneratedClips([...clips]);
         }
         
@@ -131,7 +164,7 @@ export function VideoPreview({
       setStatus('complete');
       setCurrentClipIndex(0);
       toast.success(`Generated ${clips.length} video clips!`, {
-        description: `Total duration: ~${clips.length * 5} seconds`
+        description: `Covers full ${formatDuration(audioDuration || 0)} audio track`
       });
     } catch (error) {
       console.error('Video generation error:', error);
@@ -140,14 +173,14 @@ export function VideoPreview({
       setStatus('error');
       toast.error(message);
     }
-  }, [selectedLength, avatarImage, selectedScene, musicGenre]);
+  }, [totalClips, avatarImage, selectedScene, musicGenre, audioDuration]);
 
-  // Start generation when length is selected
+  // Auto-start generation once duration is detected
   useEffect(() => {
-    if (selectedLength && status === 'selecting') {
+    if (totalClips > 0 && status === 'detecting') {
       generateVideoClips();
     }
-  }, [selectedLength]);
+  }, [totalClips, status]);
 
   // Handle video playback controls
   const togglePlayback = () => {
@@ -177,7 +210,6 @@ export function VideoPreview({
     if (generatedClips.length > 1) {
       const nextIndex = (currentClipIndex + 1) % generatedClips.length;
       
-      // If we've completed all clips, stop
       if (nextIndex === 0) {
         setIsPlaying(false);
         setCurrentClipIndex(0);
@@ -218,7 +250,6 @@ export function VideoPreview({
     }
   };
 
-  // Skip forward/backward
   const skipForward = () => {
     if (currentClipIndex < generatedClips.length - 1) {
       skipToClip(currentClipIndex + 1);
@@ -231,7 +262,7 @@ export function VideoPreview({
     }
   };
 
-  // Download all clips as zip or individual
+  // Download all clips
   const handleDownload = async () => {
     if (generatedClips.length === 0) {
       toast.error('No video to download');
@@ -254,7 +285,6 @@ export function VideoPreview({
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        // Small delay between downloads
         await new Promise(r => setTimeout(r, 500));
       }
       
@@ -266,7 +296,6 @@ export function VideoPreview({
     }
   };
 
-  // Download current clip only
   const handleDownloadCurrent = async () => {
     if (generatedClips.length === 0) return;
     
@@ -292,50 +321,23 @@ export function VideoPreview({
     toast.info("Sharing features coming soon!");
   };
 
-  // Length selection screen
-  if (status === 'selecting') {
+  // Detecting audio duration screen
+  if (status === 'detecting') {
     return (
       <div className="space-y-6 animate-fade-in">
         <Card className="overflow-hidden shadow-2xl">
-          <CardContent className="p-8">
-            <div className="text-center mb-8">
-              <div className="w-20 h-20 rounded-full gradient-primary flex items-center justify-center mx-auto mb-4">
-                <Film className="w-10 h-10 text-primary-foreground" />
+          <CardContent className="p-8 flex flex-col items-center justify-center min-h-[400px] bg-gradient-to-br from-background to-muted">
+            <div className="relative mb-6">
+              <div className="w-24 h-24 rounded-full gradient-primary flex items-center justify-center animate-pulse">
+                <Music className="w-12 h-12 text-primary-foreground" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Choose Video Length</h2>
-              <p className="text-muted-foreground">
-                Select how long you want your music video to be
-              </p>
+              <Loader2 className="absolute -bottom-2 -right-2 w-8 h-8 text-primary animate-spin" />
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {VIDEO_LENGTHS.map((length) => (
-                <button
-                  key={length.id}
-                  onClick={() => setSelectedLength(length)}
-                  className={`p-4 rounded-xl border-2 transition-all text-left hover:scale-105 ${
-                    selectedLength?.id === length.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-4 h-4 text-primary" />
-                    <span className="font-semibold">{length.name}</span>
-                  </div>
-                  <p className="text-2xl font-bold text-primary mb-1">{length.duration}</p>
-                  <p className="text-xs text-muted-foreground">{length.clips} clips</p>
-                  <p className="text-xs text-muted-foreground mt-1">{length.description}</p>
-                </button>
-              ))}
-            </div>
-            
-            <div className="flex justify-center gap-4">
-              <Button variant="outline" onClick={onStartOver}>
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-            </div>
+            <h3 className="text-xl font-semibold mb-2">Analyzing Your Audio</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Detecting audio duration to generate the perfect number of clips...
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -359,29 +361,35 @@ export function VideoPreview({
             <p className="text-muted-foreground mb-2 text-center max-w-md">
               AI is animating your avatar in the {selectedScene.name} scene
             </p>
-            <p className="text-sm text-primary mb-6">
-              Generating clip {currentGeneratingClip} of {selectedLength?.clips || 0}
+            <p className="text-sm text-primary mb-1">
+              Generating clip {currentGeneratingClip} of {totalClips}
+            </p>
+            <p className="text-xs text-muted-foreground mb-6">
+              Matching full audio length: {formatDuration(audioDuration || 0)}
             </p>
             
             <div className="w-full max-w-md space-y-3">
               <Progress value={progress} className="h-3" />
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>{Math.round(progress)}% complete</span>
-                <span>~{Math.ceil(((selectedLength?.clips || 0) - currentGeneratingClip) * 0.5)} min remaining</span>
+                <span>~{Math.ceil((totalClips - currentGeneratingClip) * 0.5)} min remaining</span>
               </div>
             </div>
             
             {/* Show generated clips preview */}
             {generatedClips.length > 0 && (
-              <div className="mt-6 flex gap-2">
+              <div className="mt-6 flex gap-2 flex-wrap justify-center">
                 {generatedClips.map((clip, idx) => (
                   <div key={idx} className="w-16 h-10 rounded overflow-hidden border-2 border-primary">
                     <video src={clip.videoUrl} className="w-full h-full object-cover" muted />
                   </div>
                 ))}
-                {Array.from({ length: (selectedLength?.clips || 0) - generatedClips.length }).map((_, idx) => (
+                {Array.from({ length: Math.min(10, totalClips - generatedClips.length) }).map((_, idx) => (
                   <div key={`pending-${idx}`} className="w-16 h-10 rounded bg-muted animate-pulse" />
                 ))}
+                {totalClips - generatedClips.length > 10 && (
+                  <span className="text-xs text-muted-foreground self-center">+{totalClips - generatedClips.length - 10} more</span>
+                )}
               </div>
             )}
           </CardContent>
@@ -410,7 +418,7 @@ export function VideoPreview({
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Start Over
               </Button>
-              <Button onClick={() => { setStatus('selecting'); setSelectedLength(null); }}>
+              <Button onClick={() => { setStatus('detecting'); setTotalClips(0); }}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Try Again
               </Button>
@@ -475,7 +483,7 @@ export function VideoPreview({
 
               {/* Timeline Progress */}
               <div className="absolute bottom-20 left-4 right-4">
-                <div className="flex gap-1 mb-2">
+                <div className="flex gap-0.5 mb-2">
                   {generatedClips.map((_, idx) => (
                     <button
                       key={idx}
@@ -536,7 +544,7 @@ export function VideoPreview({
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate text-white">{musicName}</p>
                 <p className="text-sm text-white/70">
-                  {isPlaying ? "Now Playing" : "Click to play"} • {generatedClips.length * 5}s total
+                  {isPlaying ? "Now Playing" : "Click to play"} • {formatDuration(audioDuration || 0)} total
                 </p>
               </div>
               {isPlaying && (
@@ -561,7 +569,7 @@ export function VideoPreview({
       {/* Clip Thumbnails */}
       <Card>
         <CardContent className="p-4">
-          <p className="text-sm text-muted-foreground mb-3">Video Timeline</p>
+          <p className="text-sm text-muted-foreground mb-3">Video Timeline — {generatedClips.length} clips • {formatDuration(audioDuration || 0)}</p>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {generatedClips.map((clip, idx) => (
               <button
@@ -636,7 +644,7 @@ export function VideoPreview({
         <Button
           variant="outline"
           size="lg"
-          onClick={() => { setStatus('selecting'); setSelectedLength(null); }}
+          onClick={() => { setStatus('detecting'); setTotalClips(0); }}
           className="gap-2"
         >
           <RefreshCw className="w-4 h-4" />
@@ -673,7 +681,7 @@ export function VideoPreview({
       </div>
 
       <p className="text-center text-sm text-muted-foreground">
-        🎬 {generatedClips.length} AI-animated clips • {selectedLength?.name} format • ~{generatedClips.length * 5}s total
+        🎬 {generatedClips.length} AI-animated clips • Full audio length: {formatDuration(audioDuration || 0)}
       </p>
     </div>
   );
